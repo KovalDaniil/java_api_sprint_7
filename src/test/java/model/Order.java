@@ -3,21 +3,13 @@ package model;
 import java.util.List;
 
 // модель заказа
-
 public class Order {
-
     private Long id;
-
     private String comment;
-
     private List<String> colors;
-
     private String deliveryDate;
-
     private Integer weight;
-
     private String track; // трек номер приходит только в ответе
-
     public Long getId() {
         return id;
     }

@@ -1,134 +1,76 @@
 package tests;
+
 import api.CourierApi;
 import api.OrderApi;
-import config.Config;
-import io.qameta.allure.restassured.AllureRestAssured;
-import io.restassured.builder.RequestSpecBuilder;
-import io.restassured.http.ContentType;
 import io.restassured.response.Response;
-import io.restassured.specification.RequestSpecification;
 import model.Courier;
 import model.Order;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Random;
-import java.util.stream.Stream;
-import static org.hamcrest.Matchers.containsString;
+
 import static org.hamcrest.Matchers.notNullValue;
+
+// проверяем создание заказа с разными цветами
 public class OrderCreateTest {
-    private RequestSpecification spec;
     private String adminToken;
-
+    private Courier courier;
     private Long createdCourierId;
-
-    private String createdTrack; // трек созданного заказа, им и будем отменять
-
-    @BeforeAll
-
-    static void setBaseUri() {
-
-        Config.BASE_URI = System.getProperty("base.uri", Config.BASE_URI);
-
-    }
-
+    // трек созданного заказа, им и будем отменять после теста
+    private String createdTrack;
     @BeforeEach
-
     void setUp() {
-
-        spec = new RequestSpecBuilder()
-
-                .setBaseUri(Config.BASE_URI)
-
-                .setContentType(ContentType.JSON)
-
-                .addFilter(new AllureRestAssured())
-
-                .build();
-
         adminToken = CourierApi.getAdminToken();
-
         // для создания заказа нужен авторизованный пользователь, заводим своего курьера
-
-        Courier courier = new Courier();
-
-        courier.setLogin("qwe" + new Random().nextInt(1000000));
-
-        courier.setPassword("password");
-
-        courier.setFirstName("Сидор");
-
-        courier.setLastName("Сидоров");
-
-        courier.setMiddleName("Сидорович");
-
-        courier.setPhone("+79991112233");
-
-        Response create = CourierApi.createCourier(spec, courier);
-
+        courier = TestData.courier("Сидор", "Сидоров", "+79991112233");
+        Response create = CourierApi.createCourier(courier);
         create.then().statusCode(201);
-
         createdCourierId = create.jsonPath().getLong("id");
-
     }
-    private Order buildOrder(List<String> colors) {
+    // один цвет, второй цвет, оба сразу и без цветов
+    @ParameterizedTest
+    @ValueSource(strings = {"BLACK", "GREY", "BLACK,GREY", "none"})
+    void createOrderWithColors(String colorsParam) {
+        List<String> colors;
+        if (colorsParam.equals("none")) {
+            colors = Collections.emptyList();
+        } else if (colorsParam.contains(",")) {
+            colors = Arrays.asList(colorsParam.split(","));
+        } else {
+            colors = Collections.singletonList(colorsParam);
+        }
+
+        String token = CourierApi.login(courier.getLogin(), courier.getPassword())
+                .then().statusCode(200).extract().jsonPath().getString("token");
 
         Order order = new Order();
-
         order.setComment("проверка");
-
         order.setColors(colors);
-
         order.setDeliveryDate(LocalDate.now().plusDays(1).toString());
-
         order.setWeight(1);
 
-        return order;
+        Response response = OrderApi.createOrder(token, order);
 
-    }
-    static Stream<Arguments> colorProvider() {
-        return Stream.of(
+        response.then()
+                .statusCode(201)
+                .body("track", notNullValue());   // тело ответа содержит track — требование ТЗ
 
-                Arguments.of(Collections.singletonList("BLACK")),
-
-                Arguments.of(Collections.singletonList("GREY")),
-
-                Arguments.of(Arrays.asList("BLACK", "GREY"))
-
-        );
-    }
-    // один цвет, второй цвет и оба сразу + случай без цветов ниже отдельным тестом
-    @ParameterizedTest
-    @MethodSource("colorProvider")
-    void createOrderWithColors(List<String> colors) {
-
-        String token = CourierApi.login("qwe", "password").jsonPath().getString("token");
-
-        // токен берем того курьера которого создали в beforeeach
-
+        createdTrack = response.jsonPath().getString("track");
     }
     @AfterEach
     void tearDown() {
-
         if (createdTrack != null) {
-
             OrderApi.cancelOrder(adminToken, createdTrack).then().statusCode(204);
-
+            createdTrack = null;
         }
-
         if (createdCourierId != null) {
-
             CourierApi.deleteCourier(adminToken, createdCourierId).then().statusCode(200);
-
         }
-
     }
-
 }

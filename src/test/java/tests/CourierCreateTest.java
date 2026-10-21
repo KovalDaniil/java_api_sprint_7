@@ -1,179 +1,118 @@
 package tests;
+
 import api.CourierApi;
 import config.Config;
-import io.qameta.allure.restassured.AllureRestAssured;
-import io.restassured.RestAssured;
-import io.restassured.builder.RequestSpecBuilder;
-import io.restassured.filter.log.LogDetail;
-import io.restassured.http.ContentType;
 import io.restassured.response.Response;
-import io.restassured.specification.RequestSpecification;
 import model.Courier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import java.util.Random;
+
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+
+//создание курьера
 public class CourierCreateTest {
-    private RequestSpecification spec;
     private String adminToken;
-    private Long createdCourierId; // запоминаем id, чтобы удалить курьера после теста
+    // id созданного курьера, чтобы удалить его после теста
+    private Long createdCourierId;
     @BeforeEach
     void setUp() {
-        spec = new RequestSpecBuilder()
-                .setBaseUri(Config.BASE_URI)
-                .setContentType(ContentType.JSON)
-                .addFilter(new AllureRestAssured())
-                .logRequest(LogDetail.ALL)
-                .logResponse(LogDetail.ALL)
-                .build();
         adminToken = CourierApi.getAdminToken();
-    }
-        // собираем курьера со случайным логином, чтобы тесты не мешали
-    private Courier buildCourier() {
-        Courier courier = new Courier();
-        courier.setLogin("qwe" + new Random().nextInt(1000000));
-        courier.setPassword("password");
-        courier.setFirstName("Иван");
-        courier.setLastName("Иванов");
-        courier.setMiddleName("Иванович");
-        courier.setPhone("+79999999999");
-        return courier;
     }
     @Test
     void createCourierSuccess() {
+        Courier courier = TestData.courier();
 
-        Courier courier = buildCourier();
-
-        Response response = CourierApi.createCourier(spec, courier);
+        Response response = CourierApi.createCourier(courier);
 
         response.then()
-
                 .statusCode(201)
-
                 .body("ok", equalTo(true))
-
                 .body("id", notNullValue());
 
         createdCourierId = response.jsonPath().getLong("id");
-
     }
-
     @Test
-
     void createDuplicateCourier() {
+        Courier courier = TestData.courier();
 
-        Courier courier = buildCourier();
-
-        CourierApi.createCourier(spec, courier).then().statusCode(201);
-
-        Response second = CourierApi.createCourier(spec, courier);
-
-        second.then()
-
+        Response first = CourierApi.createCourier(courier);
+        first.then().statusCode(201);
+        createdCourierId = first.jsonPath().getLong("id");
+        // пробуем создать второго такого же курьера
+        CourierApi.createCourier(courier)
+                .then()
                 .statusCode(409)
-
                 .body("message", containsString("Courier with such login already exists"));
-
-        // достаем id первого курьера из списка и чистим за собой
-
-        Response list = CourierApi.getCouriers(adminToken);
-
-        createdCourierId = list.jsonPath().getLong("couriers.find{it.login == '" + courier.getLogin() + "'}.id");
-
     }
-
-        // проверяем что без каждого обязательного поля создание падает с ошибкой
-
+    // без каждого обязательного поля создание падает с ошибкой
+    // middleName сюда не берем, необязательный, без него курьер создается нормально
     @ParameterizedTest
-
     @ValueSource(strings = {"login", "password", "firstName", "lastName", "phone"})
-
     void createCourierWithoutRequiredField(String missingField) {
-
-        Courier courier = buildCourier();
+        Courier courier = TestData.courier();
 
         switch (missingField) {
-
             case "login":
-
                 courier.setLogin(null);
-
                 break;
-
             case "password":
-
                 courier.setPassword(null);
-
                 break;
-
             case "firstName":
-
                 courier.setFirstName(null);
-
                 break;
-
             case "lastName":
-
                 courier.setLastName(null);
-
                 break;
-
             case "phone":
-
                 courier.setPhone(null);
-
                 break;
-
         }
 
-        Response response = CourierApi.createCourier(spec, courier);
+        Response response = CourierApi.createCourier(courier);
 
+        // у этой ручки в ошибке всегда поле message
         response.then()
-
                 .statusCode(400)
-
                 .body("message", containsString(missingField));
-
     }
-
     @Test
+    void createCourierWithExistingLogin() {
+        Courier courier = TestData.courier();
 
-    void createCourierWithoutBody() {
+        Response first = CourierApi.createCourier(courier);
+        first.then().statusCode(201);
+        createdCourierId = first.jsonPath().getLong("id");
+        // второй курьер с другим именем, но таким же логином — тоже ошибка
+        Courier second = TestData.courier("Пётр", "Петров", "+79997654321");
+        second.setLogin(courier.getLogin());
 
-        given(spec)
-
-                .contentType(ContentType.JSON)
-
-                .when()
-
-                .post("/api/v1/couriers")
-
+        CourierApi.createCourier(second)
                 .then()
-
+                .statusCode(409)
+                .body("message", containsString("Courier with such login already exists"));
+    }
+    @Test
+    void createCourierWithoutBody() {
+        given().baseUri(Config.BASE_URI)
+                .contentType("application/json")
+                .when()
+                .post("/api/v1/couriers")
+                .then()
                 .statusCode(400)
-
                 .body("message", containsString(Config.ERROR_EMPTY_BODY));
-
     }
-
     @AfterEach
-
     void tearDown() {
-
         if (createdCourierId != null) {
-
             CourierApi.deleteCourier(adminToken, createdCourierId).then().statusCode(200);
-
             createdCourierId = null;
-
         }
-
     }
-
 }

@@ -1,23 +1,15 @@
 package model;
 
-// модель курьера. без lombok, просто геттеры и сеттеры как учили
+// модель курьера
 
 public class Courier {
-
     private Long id;
-
     private String login;
-
     private String password;
-
     private String firstName;
-
     private String lastName;
-
     private String middleName;
-
     private String phone;
-
     public Long getId() {
         return id;
     }
