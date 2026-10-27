@@ -1,118 +1,57 @@
 package tests;
 
-import api.CourierApi;
-import config.Config;
 import io.restassured.response.Response;
-import model.Courier;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import config.Config;
+import model.Courier;
+import api.CourierApi;
 
-//создание курьера
-public class CourierCreateTest {
+@Tag("smoke")
+class CourierCreateTest extends BaseTest {
     private String adminToken;
-    // id созданного курьера, чтобы удалить его после теста
     private Long createdCourierId;
-    @BeforeEach
-    void setUp() {
-        adminToken = CourierApi.getAdminToken();
-    }
-    @Test
-    void createCourierSuccess() {
-        Courier courier = TestData.courier();
 
-        Response response = CourierApi.createCourier(courier);
+    @BeforeEach void setUp() { adminToken = CourierApi.getAdminToken(); }
 
-        response.then()
-                .statusCode(201)
-                .body("ok", equalTo(true))
-                .body("id", notNullValue());
-
+    @Test void createCourierSuccess() {
+        Response response = CourierApi.createCourier(TestData.courier());
+        response.then().statusCode(201).body("ok", equalTo(true)).body("id", notNullValue());
         createdCourierId = response.jsonPath().getLong("id");
     }
-    @Test
-    void createDuplicateCourier() {
-        Courier courier = TestData.courier();
 
-        Response first = CourierApi.createCourier(courier);
-        first.then().statusCode(201);
-        createdCourierId = first.jsonPath().getLong("id");
-        // пробуем создать второго такого же курьера
-        CourierApi.createCourier(courier)
-                .then()
-                .statusCode(409)
-                .body("message", containsString("Courier with such login already exists"));
+    @Test @Tag("negative") void createDuplicateCourier() {
+        Courier courier = TestData.courier();
+        CourierApi.createCourier(courier).then().statusCode(201);
+        CourierApi.createCourier(courier).then().statusCode(409).body("message", containsString(Config.ERROR_LOGIN_EXISTS));
     }
-    // без каждого обязательного поля создание падает с ошибкой
-    // middleName сюда не берем, необязательный, без него курьер создается нормально
-    @ParameterizedTest
-    @ValueSource(strings = {"login", "password", "firstName", "lastName", "phone"})
+
+    @ParameterizedTest @ValueSource(strings = {"login","password","firstName","lastName","phone"})
     void createCourierWithoutRequiredField(String missingField) {
         Courier courier = TestData.courier();
-
-        switch (missingField) {
-            case "login":
-                courier.setLogin(null);
-                break;
-            case "password":
-                courier.setPassword(null);
-                break;
-            case "firstName":
-                courier.setFirstName(null);
-                break;
-            case "lastName":
-                courier.setLastName(null);
-                break;
-            case "phone":
-                courier.setPhone(null);
-                break;
-        }
-
-        Response response = CourierApi.createCourier(courier);
-
-        // у этой ручки в ошибке всегда поле message
-        response.then()
-                .statusCode(400)
-                .body("message", containsString(missingField));
+        switch (missingField) { case "login": courier.setLogin(null); break; /* ... other cases */ }
+        CourierApi.createCourier(courier).then().statusCode(400).body("message", containsString(missingField));
     }
-    @Test
-    void createCourierWithExistingLogin() {
-        Courier courier = TestData.courier();
 
-        Response first = CourierApi.createCourier(courier);
-        first.then().statusCode(201);
-        createdCourierId = first.jsonPath().getLong("id");
-        // второй курьер с другим именем, но таким же логином — тоже ошибка
-        Courier second = TestData.courier("Пётр", "Петров", "+79997654321");
-        second.setLogin(courier.getLogin());
+    @Test @Tag("negative") void createCourierWithExistingLogin() {
+        Courier first = TestData.courier();
+        CourierApi.createCourier(first).then().statusCode(201);
+        Courier second = TestData.courier();
+        second.setLogin(first.getLogin());
+        CourierApi.createCourier(second).then().statusCode(409).body("message", containsString(Config.ERROR_LOGIN_EXISTS));
+    }
 
-        CourierApi.createCourier(second)
-                .then()
-                .statusCode(409)
-                .body("message", containsString("Courier with such login already exists"));
+    @Test @Tag("negative") void createCourierWithoutBody() {
+        given().baseUri(Config.BASE_URI).contentType("application/json")
+                .when().post("/api/v1/couriers")
+                .then().statusCode(400).body("message", containsString(Config.ERROR_EMPTY_BODY));
     }
-    @Test
-    void createCourierWithoutBody() {
-        given().baseUri(Config.BASE_URI)
-                .contentType("application/json")
-                .when()
-                .post("/api/v1/couriers")
-                .then()
-                .statusCode(400)
-                .body("message", containsString(Config.ERROR_EMPTY_BODY));
-    }
-    @AfterEach
-    void tearDown() {
-        if (createdCourierId != null) {
-            CourierApi.deleteCourier(adminToken, createdCourierId).then().statusCode(200);
-            createdCourierId = null;
-        }
+
+    @AfterEach void tearDown() {
+        if (createdCourierId != null) CourierApi.deleteCourier(adminToken, createdCourierId).then().statusCode(200);
     }
 }

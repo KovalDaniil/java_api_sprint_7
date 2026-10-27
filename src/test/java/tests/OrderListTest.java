@@ -1,76 +1,45 @@
 package tests;
 
-import api.CourierApi;
-import api.OrderApi;
-import config.Config;
 import io.restassured.response.Response;
+import org.junit.jupiter.api.*;
+import static org.hamcrest.Matchers.*;
+import config.Config;
 import model.Courier;
 import model.Order;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import api.CourierApi;
+import api.OrderApi;
 
-import java.time.LocalDate;
-
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasSize;
-
-// проверяем ручку списка заказов
-public class OrderListTest {
+class OrderListTest extends BaseTest {
     private String adminToken;
-    private Courier courier;
     private Long createdCourierId;
     private String createdTrack;
-    @BeforeEach
-    void setUp() {
-        adminToken = CourierApi.getAdminToken();
+    private String userToken;
 
-        courier = TestData.courier("Олег", "Олегов", "+79995554433");
-        Response create = CourierApi.createCourier(courier);
-        create.then().statusCode(201);
-        createdCourierId = create.jsonPath().getLong("id");
-    }
-    @Test
-    void listContainsCreatedOrder() {
-        String token = CourierApi.login(courier.getLogin(), courier.getPassword())
-                .then().statusCode(200).extract().jsonPath().getString("token");
+    @BeforeEach void setUp() {
+        adminToken = CourierApi.getAdminToken();
+        Courier courier = TestData.courier();
+        createdCourierId = CourierApi.createCourier(courier).then().statusCode(201).extract().jsonPath().getLong("id");
+        userToken = CourierApi.login(courier.getLogin(), courier.getPassword()).extract().jsonPath().getString("token");
 
         Order order = new Order();
-        order.setComment("проверка списка");
-        // заказ без цветов тоже создается нормально
-        order.setColors(null);
-        order.setDeliveryDate(LocalDate.now().plusDays(1).toString());
+        order.setComment("list test");
+        order.setDeliveryDate(java.time.LocalDate.now().plusDays(1).toString());
         order.setWeight(1);
+        createdTrack = OrderApi.createOrder(userToken, order).then().statusCode(201).extract().jsonPath().getString("track");
+    }
 
-        Response create = OrderApi.createOrder(token, order);
-        create.then().statusCode(201);
-        createdTrack = create.jsonPath().getString("track");
-
-        Response list = OrderApi.getOrders(token);
-
-        list.then()
-                .statusCode(200)
-                .body("orders", hasSize(greaterThan(0)));
-
-        // проверяем, что наш заказ действительно прилетел в списке
+    @Test @Tag("smoke") void listContainsCreatedOrder() {
+        Response list = OrderApi.getOrders(userToken);
+        list.then().statusCode(200).body("orders", hasSize(greaterThan(0)));
         list.then().body("orders.track", containsString(createdTrack));
     }
-    // без токена список заказов недоступен
-    @Test
-    void listWithoutTokenForbidden() {
-        OrderApi.getOrders(null)
-                .then()
-                .statusCode(403)
-                .body("message", containsString(Config.ERROR_FORBIDDEN));
+
+    @Test @Tag("negative") void listWithoutTokenForbidden() {
+        OrderApi.getOrders(null).then().statusCode(403).body("message", containsString(Config.ERROR_FORBIDDEN));
     }
-    @AfterEach
-    void tearDown() {
-        if (createdTrack != null) {
-            OrderApi.cancelOrder(adminToken, createdTrack).then().statusCode(204);
-        }
-        if (createdCourierId != null) {
-            CourierApi.deleteCourier(adminToken, createdCourierId).then().statusCode(200);
-        }
+
+    @AfterEach void tearDown() {
+        if (createdTrack != null) OrderApi.cancelOrder(adminToken, createdTrack).then().statusCode(204);
+        if (createdCourierId != null) CourierApi.deleteCourier(adminToken, createdCourierId).then().statusCode(200);
     }
 }
