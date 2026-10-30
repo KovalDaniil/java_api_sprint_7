@@ -1,50 +1,89 @@
 package tests;
 
+import io.qameta.allure.Description;
+import io.qameta.allure.junit4.DisplayName;
+import io.restassured.RestAssured;
 import io.restassured.response.Response;
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-import java.time.LocalDate;
-import java.util.*;
-import static org.hamcrest.Matchers.notNullValue;
-import config.Config;
-import model.Courier;
-import model.Order;
-import api.CourierApi;
-import api.OrderApi;
+import order.Client;
+import order.Order;
+import order.OrderSteps;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
-class OrderCreateTest extends BaseTest {
-    private String adminToken;
-    private Long createdCourierId;
-    private String createdTrack;
+import static org.hamcrest.CoreMatchers.*;
+public class OrderCreateTest extends Client {
+    // Задаю статические параметры заказа
+    private static final String FIRST_NAME = "Артас";
+    private static final String LAST_NAME = "Менетил";
+    private static final String ADDRESS = "Азерот, г. Лордерон, ул. Тронный Зал";
+    private static final String METRO_STATION = "Черкизовская";
+    private static final String PHONE = "+79998886677";
+    private static final int RENT_TIME = 6;
+    private static final String DELIVERY_DATE = "2024-04-04";
+    private static final String COMMENT = "За моего Отца!";
 
-    @BeforeEach void setUp() {
-        adminToken = CourierApi.getAdminToken();
-        Courier courier = TestData.courier();
-        createdCourierId = CourierApi.createCourier(courier).then().statusCode(201).extract().jsonPath().getLong("id");
+    // Параметры для цветов заказа
+    private String color;
+    String track;
+
+    @Before
+    // Устанавливаю предварительно настроенную спецификацию запроса в RestAssured перед каждым запуском теста.
+    public void setUp() {
+        RestAssured.requestSpecification = requestSpec;
     }
 
-    @ParameterizedTest(name = "Цвета: {0}") @ValueSource(strings = {"BLACK", "GREY", "BLACK,GREY", "none"})
-    void createOrderWithColors(String colorsParam) {
-        List<String> colors = "none".equals(colorsParam) ? Collections.emptyList() :
-                colorsParam.contains(",") ? Arrays.asList(colorsParam.split(",")) :
-                        Collections.singletonList(colorsParam);
-
-        String token = CourierApi.login(TestData.courier().getLogin(), "1234").extract().jsonPath().getString("token"); // Simplified for brevity, actual code uses created courier creds
-
-        Order order = new Order();
-        order.setComment("проверка");
-        order.setColors(colors);
-        order.setDeliveryDate(LocalDate.now().plusDays(1).toString());
-        order.setWeight(1);
-
-        Response response = OrderApi.createOrder(token, order);
-        response.then().statusCode(201).body("track", notNullValue());
-        createdTrack = response.jsonPath().getString("track");
+    // Конструктор класса, используемый параметризованным тестом
+    public OrderCreateTest(String color) {
+        this.color = color;
     }
 
-    @AfterEach void tearDown() {
-        if (createdTrack != null) OrderApi.cancelOrder(adminToken, createdTrack).then().statusCode(204);
-        if (createdCourierId != null) CourierApi.deleteCourier(adminToken, createdCourierId).then().statusCode(200);
+    // Параметры для теста, определяющие возможные цвета заказа
+    @Parameterized.Parameters(name = "colour = ''{0}''")  // {0} - это место, куда подставляется значение параметра.
+    public static Object[] getColour() {
+        return new Object[][]{
+                {"BLACK"},
+                {"GREY"},
+                {"BLACK, GREY"},
+                {""}
+        };
+    }
+
+    // Тест для создания заказа с указанием цвета
+    @Test
+    @DisplayName("Создание заказа")
+    @Description("Заказ можно создать с указанием только одного цвета или обоих цветов")
+    public void createOrder() {
+        // Создаю заказ с указанным цветом
+        Order order = new Order(FIRST_NAME, LAST_NAME, ADDRESS, METRO_STATION, PHONE, RENT_TIME, DELIVERY_DATE, COMMENT, new String[]{color});
+        // Выполняю запрос на создание заказа
+        Response response = OrderSteps.createOrder(order);
+        // Извлекаю трек заказа из ответа
+        track = response.then().extract().path("track").toString();
+        // Проверяю, что заказ успешно создан
+        response.then().assertThat().statusCode(201).and().assertThat().body("track", notNullValue());
+    }
+
+    // Тест для создания заказа без указания цвета
+    @Test
+    @DisplayName("Создание заказа без указания параметра color")
+    @Description("Заказ можно создать, если не указать параметр color")
+    public void createOrderWithoutColor() {
+        // Создаю заказ без указания цвета
+        Order order = new Order(FIRST_NAME, LAST_NAME, ADDRESS, METRO_STATION, PHONE, RENT_TIME, DELIVERY_DATE, COMMENT);
+        // Выполняю запрос на создание заказа
+        Response response = OrderSteps.createOrder(order);
+        // Извлекаю трек заказа из ответа
+        track = response.then().extract().path("track").toString();
+        // Проверяю, что заказ успешно создан
+        response.then().assertThat().statusCode(201).and().assertThat().body("track", notNullValue());
+    }
+
+    // После выполнения теста отменяем созданный заказ
+    @After
+    public void cancelOrder() {
+        OrderSteps.cancelOrder(track);
     }
 }

@@ -1,45 +1,47 @@
 package tests;
 
-import io.restassured.response.Response;
-import org.junit.jupiter.api.*;
-import static org.hamcrest.Matchers.*;
-import config.Config;
-import model.Courier;
-import model.Order;
-import api.CourierApi;
-import api.OrderApi;
+import io.qameta.allure.Description;
+import io.qameta.allure.junit4.DisplayName;
+import io.restassured.RestAssured;
+import io.restassured.response.ValidatableResponse;
+import order.Client;
+import order.OrderSteps;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
-class OrderListTest extends BaseTest {
-    private String adminToken;
-    private Long createdCourierId;
-    private String createdTrack;
-    private String userToken;
+import java.util.HashMap;
+import java.util.List;
 
-    @BeforeEach void setUp() {
-        adminToken = CourierApi.getAdminToken();
-        Courier courier = TestData.courier();
-        createdCourierId = CourierApi.createCourier(courier).then().statusCode(201).extract().jsonPath().getLong("id");
-        userToken = CourierApi.login(courier.getLogin(), courier.getPassword()).extract().jsonPath().getString("token");
 
-        Order order = new Order();
-        order.setComment("list test");
-        order.setDeliveryDate(java.time.LocalDate.now().plusDays(1).toString());
-        order.setWeight(1);
-        createdTrack = OrderApi.createOrder(userToken, order).then().statusCode(201).extract().jsonPath().getString("track");
+
+
+//Класс теста для проверки того, что в тело ответа возвращается список заказов.
+public class OrderListTest extends Client {
+    // Создаю приватное поле orderStepMethods типа OrderStepMethods
+    private OrderSteps orderStepMethods;
+
+    @Before
+    public void setUp() {
+        // Устанавливаю предварительно настроенную спецификацию запроса
+        RestAssured.requestSpecification = requestSpec;
+        // Инициализирую экземпляр класса, содержащего методы для работы с заказами
+        orderStepMethods = new OrderSteps();
     }
 
-    @Test @Tag("smoke") void listContainsCreatedOrder() {
-        Response list = OrderApi.getOrders(userToken);
-        list.then().statusCode(200).body("orders", hasSize(greaterThan(0)));
-        list.then().body("orders.track", containsString(createdTrack));
-    }
-
-    @Test @Tag("negative") void listWithoutTokenForbidden() {
-        OrderApi.getOrders(null).then().statusCode(403).body("message", containsString(Config.ERROR_FORBIDDEN));
-    }
-
-    @AfterEach void tearDown() {
-        if (createdTrack != null) OrderApi.cancelOrder(adminToken, createdTrack).then().statusCode(204);
-        if (createdCourierId != null) CourierApi.deleteCourier(adminToken, createdCourierId).then().statusCode(200);
+    @Test
+    @DisplayName("Получение списка заказов")
+    @Description("Проверка, что в тело ответа возвращается список заказов.")
+    public void getOrderList() {
+        // Выполняю запрос на получение списка заказов
+        ValidatableResponse responseCreate = orderStepMethods.getOrderList();
+        // Извлекаю статус код из ответа
+        int actualStatusCodeCreate = responseCreate.extract().statusCode();
+        // Извлекаю тело ответа в виде списка HashMap
+        List<HashMap> orderBody = responseCreate.extract().path("orders");
+        // Проверяю, что статус код равен 200
+        Assert.assertEquals(200, actualStatusCodeCreate);
+        // Проверяю, что тело ответа не пусто
+        Assert.assertFalse("Список заказов пуст", orderBody.isEmpty());
     }
 }

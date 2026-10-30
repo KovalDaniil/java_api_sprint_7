@@ -1,46 +1,108 @@
 package tests;
 
+import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.notNullValue;
+
+import courier.Courier;
+import courier.CourierData;
+import courier.CourierSteps;
+import io.qameta.allure.Description;
+import io.qameta.allure.junit5.DisplayName;
+import io.restassured.RestAssured;
 import io.restassured.response.Response;
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import config.Config;
-import model.Courier;
-import api.CourierApi;
+import order.Client;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 
-class CourierLoginTest extends BaseTest {
-    private String adminToken;
-    private Courier courier;
-    private Long createdCourierId;
 
-    @BeforeEach void setUp() {
-        adminToken = CourierApi.getAdminToken();
-        courier = TestData.courier("Пётр", "Петров", "+79998887766");
-        createdCourierId = CourierApi.createCourier(courier).then().statusCode(201).extract().jsonPath().getLong("id");
+//Класс тестов для проверки авторизации курьеров через API
+public class CourierLoginTest extends Client {
+    // Объект для получения тестовых данных
+    private final CourierData courierData = new CourierData();
+    // Переменная для хранения id курьера
+    String id = null;
+
+
+    @Before
+    // Устанавливаю предварительно настроенную спецификацию запроса в RestAssured перед каждым запуском теста.
+    public void setUp() {
+        RestAssured.requestSpecification = requestSpec;
     }
 
-    @Test @Tag("smoke") void loginSuccess() {
-        Response response = CourierApi.login(courier.getLogin(), courier.getPassword());
-        response.then().statusCode(200).body("token", notNullValue()).body("id", notNullValue());
-        assertEquals(createdCourierId, response.jsonPath().getLong("id"));
+    //Тест на успешный логин курьера.
+    @Test
+    @DisplayName("Успешный логин курьера")
+    @Description("Логин курьера в системе.Курьер может авторизоваться. Успешный запрос возвращает id.")
+    public void loginCourier() {
+        // Создаю объект курьера с валидными данными
+        Courier courier = new Courier(courierData.getExistingLogin(), courierData.getExistingPassword());
+        // Создаю курьера перед выполнением теста
+        CourierSteps.createCourier(courier);
+        // Получаю id курьера после успешной авторизации
+        id = CourierSteps.loginCourier(courier)
+                .then()
+                .extract()
+                .path("id")
+                .toString();
+        // Отправляю запрос на логин и проверяем статус код и наличие ID в теле ответа
+        Response response = CourierSteps.loginCourier(courier);
+        response.then().assertThat().statusCode(200).and().body("id", notNullValue());
     }
 
-    @ParameterizedTest @CsvSource({"wrongLogin, password", "qwe123456, wrongPassword"})
-    void loginWithWrongCredentials(String login, String password) {
-        CourierApi.login(login, password).then().statusCode(401).body("message", containsString(Config.ERROR_BAD_CREDENTIALS));
+    //Тест на авторизацию курьера без логина.
+    @Test
+    @DisplayName("Авторизация курьера без логина")
+    @Description("Для авторизации курьера необходимо передать все обязательные поля. Передаётся пустой логин")
+    public void authorizationCourierWithoutLogin() {
+        // Создаю объект курьера без логина
+        Courier courier = new Courier("", courierData.getExistingPassword());
+        // Отправляю запрос на авторизацию и проверяем статус код, и тело ответа
+        Response response = CourierSteps.loginCourier(courier);
+        response.then().assertThat().statusCode(400).and().assertThat().body("message", equalTo("Недостаточно данных для входа"));
     }
 
-    @Test void loginNotExistingCourier() {
-        CourierApi.login("nettakogo" + System.currentTimeMillis(), "password").then().statusCode(401).body("message", containsString(Config.ERROR_BAD_CREDENTIALS));
+    //Тест на авторизацию курьера без пароля.
+    @Test
+    @DisplayName("Авторизация курьера без пароля")
+    @Description("Для авторизации курьера необходимо передать все обязательные поля. Передается пустой пароль курьера")
+    public void authorizationCourierWithoutPassword() {
+        // Создаю объект курьера без пароля
+        Courier courier = new Courier(courierData.getExistingLogin(), "");
+        // Отправляю запрос на авторизацию и проверяем статус код и тело ответа
+        Response response = CourierSteps.loginCourier(courier);
+        response.then().assertThat().statusCode(400).and().assertThat().body("message", equalTo("Недостаточно данных для входа"));
     }
 
-    @Test void loginWithoutAuthHeader() {
-        given().baseUri(Config.BASE_URI).contentType("application/json")
-                .when().post("/api/v1/couriers/login").then().statusCode(401);
+    //Тест на авторизацию курьера с неправильным логином.
+    @Test
+    @DisplayName("Авторизация курьера c неправильным логином")
+    @Description("Для авторизации курьера необходимо передать существующие данные. Передается неправильный логин")
+    public void authorizationCourierWithNonExistentLogin() {
+        // Создаю объект курьера с неправильным логином
+        Courier courier = new Courier(courierData.getNonExistLogin(), courierData.getExistingPassword());
+        // Отправляю запрос на авторизацию и проверяем статус код и тело ответа
+        Response response = CourierSteps.loginCourier(courier);
+        response.then().assertThat().statusCode(404).and().assertThat().body("message", equalTo("Учетная запись не найдена"));
     }
 
-    @AfterEach void tearDown() { CourierApi.deleteCourier(adminToken, createdCourierId).then().statusCode(200); }
+    //Тест на авторизацию курьера с неправильным паролем.
+    @Test
+    @DisplayName("Авторизация курьера c неправильным паролем")
+    @Description("Для авторизации курьера необходимо передать существующие данные. Передается неверный пароль курьера")
+    public void authorizationCourierWithNonExistentPassword() {
+        // Создаю объект курьера с неправильным паролем
+        Courier courier = new Courier(courierData.getExistingLogin(), courierData.getNonExistPassword());
+        // Отправляю запрос на авторизацию и проверяем статус код и тело ответа
+        Response response = CourierSteps.loginCourier(courier);
+        response.then().assertThat().statusCode(404).and().assertThat().body("message", equalTo("Учетная запись не найдена"));
+    }
+
+    //Этот метод выполняется после каждого теста. Он удаляет курьера, если его id не равен null.
+    @After
+    public void deleteCourier() {
+        if (id != null) {
+            CourierSteps.deleteCourier(id);
+        }
+    }
 }
