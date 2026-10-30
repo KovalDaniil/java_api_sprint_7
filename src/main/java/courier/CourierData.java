@@ -1,50 +1,35 @@
 package courier;
-import java.util.Random;
-//Класс CourierData предоставляет тестовые данные для тестирования функционала, связанного с курьерами.
+
+import java.util.concurrent.ThreadLocalRandom;
+
 public class CourierData {
-    private final String existingLogin;      // Существующий логин курьера
-    private final String nonExistentLogin;      // Несуществующий логин курьера
-    private final String existingPassword;   // Существующий пароль курьера
-    private final String nonExistentPassword;   // Несуществующий пароль курьера
-    private final String firstName;          // Имя курьера
+    private final String login;
+    private final String password;
+    private final String firstName;
 
-    //Конструктор класса, инициализирующий тестовые данные
     public CourierData() {
-        this.existingLogin = randomLoginOrPass(9);         // Генерация случайного логина
-        this.nonExistentLogin = randomLoginOrPass(9) + "lol"; // Генерация случайного несуществующего логина при добавлении "kek"
-        this.existingPassword = "existPass";                      // Установка существующего пароля
-        this.nonExistentPassword = randomLoginOrPass(8);      // Генерация случайного несуществующего пароля
-        this.firstName = "firstName";                             // Установка имени курьера
+        this.login = randomString(10);
+        this.password = randomString(8);
+        this.firstName = "Ivan";
     }
 
-    //Метод для генерации случайного логина или пароля заданной длины.
-    public static String randomLoginOrPass (int length) {
-        int leftLimit = 97;   // Код символа 'a' в таблице ASCII
-        int rightLimit = 122; // Код символа 'z' в таблице ASCII
-        Random random = new Random(); //Создается экземпляр класса Random, который будет использоваться для генерации случайных чисел.
-        return random.ints(leftLimit, rightLimit + 1)   //Этот вызов генерирует последовательность случайных целых чисел в заданном диапазоне (от 'a' до 'z' включительно).
-                .limit(length)    //Ограничивает количество сгенерированных чисел заданной длиной (length), что соответствует количеству символов в строке.
-                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)  //Здесь используется метод collect, который собирает сгенерированные числа в объект StringBuilder. StringBuilder::new создает новый объект StringBuilder, StringBuilder::appendCodePoint добавляет к нему каждый сгенерированный код символа.
-                .toString();  //Вызывается метод toString(), чтобы преобразовать объект StringBuilder в строку.
+    // Генерирует случайную строку из строчных латинских букв заданной длины
+    public static String randomString(int length) {
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            result.append((char) ThreadLocalRandom.current().nextInt('a', 'z' + 1));
+        }
+        return result.toString();
     }
 
-    //Метод для получения существующего логина курьера.
-    public String getExistingLogin() {
-        return existingLogin;
+    public String getLogin() {
+        return login;
     }
-    //Метод для получения несуществующего логина курьера.
-    public String getNonExistLogin() {
-        return nonExistentLogin;
+
+    public String getPassword() {
+        return password;
     }
-    //Метод для получения существующего пароля курьера.
-    public String getExistingPassword() {
-        return existingPassword;
-    }
-    //Метод для получения несуществующего пароля курьера.
-    public String getNonExistPassword() {
-        return nonExistentPassword;
-    }
-    //Метод для получения имени курьера.
+
     public String getFirstName() {
         return firstName;
     }

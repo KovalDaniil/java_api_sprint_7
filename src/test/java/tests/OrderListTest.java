@@ -1,47 +1,32 @@
 package tests;
 
+import courier.ScooterSteps;
 import io.qameta.allure.Description;
-import io.qameta.allure.junit4.DisplayName;
-import io.restassured.RestAssured;
-import io.restassured.response.ValidatableResponse;
-import order.Client;
-import order.OrderSteps;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
-
-
-//Класс теста для проверки того, что в тело ответа возвращается список заказов.
-public class OrderListTest extends Client {
-    // Создаю приватное поле orderStepMethods типа OrderStepMethods
-    private OrderSteps orderStepMethods;
-
-    @Before
-    public void setUp() {
-        // Устанавливаю предварительно настроенную спецификацию запроса
-        RestAssured.requestSpecification = requestSpec;
-        // Инициализирую экземпляр класса, содержащего методы для работы с заказами
-        orderStepMethods = new OrderSteps();
-    }
+// Тест получения списка заказов
+public class OrderListTest {
 
     @Test
-    @DisplayName("Получение списка заказов")
-    @Description("Проверка, что в тело ответа возвращается список заказов.")
-    public void getOrderList() {
-        // Выполняю запрос на получение списка заказов
-        ValidatableResponse responseCreate = orderStepMethods.getOrderList();
-        // Извлекаю статус код из ответа
-        int actualStatusCodeCreate = responseCreate.extract().statusCode();
-        // Извлекаю тело ответа в виде списка HashMap
-        List<HashMap> orderBody = responseCreate.extract().path("orders");
-        // Проверяю, что статус код равен 200
-        Assert.assertEquals(200, actualStatusCodeCreate);
-        // Проверяю, что тело ответа не пусто
-        Assert.assertFalse("Список заказов пуст", orderBody.isEmpty());
+    @Description("В тело ответа возвращается список заказов")
+    public void getOrderListTest() {
+        // Создаём заказ, чтобы гарантировать, что список заказов не пустой
+        String track = ScooterSteps.createOrder(ScooterSteps.newOrder(null))
+                .then()
+                .statusCode(201)
+                .extract().path("track").toString();
+        try {
+            List<Object> orders = ScooterSteps.getOrderList()
+                    .then()
+                    .statusCode(200)
+                    .extract().path("orders");
+            assertFalse(orders.isEmpty(), "Список заказов пуст");
+        } finally {
+            ScooterSteps.cancelOrder(track);
+        }
     }
 }

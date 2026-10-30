@@ -1,6 +1,7 @@
 package courier;
 
 public class Courier {
+
     private String login;
     private String password;
     private String firstName;
@@ -9,11 +10,6 @@ public class Courier {
         this.login = login;
         this.password = password;
         this.firstName = firstName;
-    }
-
-    public Courier(String login, String password) {
-        this.login = login;
-        this.password = password;
     }
 
     public String getLogin() {
